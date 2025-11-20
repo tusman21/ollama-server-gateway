@@ -9,30 +9,18 @@ DIM='\033[2m'
 NC='\033[0m' # No Color
 
 # --- Logging Functions ---
-log_info() {
-    echo -e "${BLUE}INFO: $1${NC}"
-}
-log_success() {
-    echo -e "${GREEN}SUCCESS: $1${NC}"
-}
-log_warn() {
-    echo -e "${YELLOW}WARN: $1${NC}"
-}
-log_error() {
-    echo -e "${RED}ERROR: $1${NC}"
-    exit 1
-}
+log_info() { printf "${BLUE}INFO: %s${NC}\n" "$1"; }
+log_success() { printf "${GREEN}SUCCESS: %s${NC}\n" "$1"; }
+log_warn() { printf "${YELLOW}WARN: %s${NC}\n" "$1"; }
+log_error() { printf "${RED}ERROR: %s${NC}\n" "$1"; exit 1; }
 
 # --- Cleanup ---
-# This function will run when the script exits (e.g., on Ctrl+C)
 OLLAMA_PID=""
 cleanup() {
-    echo "" # Newline on exit
-    log_info "Cleaning up and shutting down..."
+    echo ""
+    log_info "Cleaning up..."
     if [ -n "$OLLAMA_PID" ]; then
-        # If we started ollama, kill the background process
         kill $OLLAMA_PID > /dev/null 2>&1
-        log_info "Stopped background Ollama process."
     fi
     log_info "Tunnel closed. Goodbye!"
 }
@@ -50,94 +38,68 @@ echo ""
 # --- 1. Argument Check ---
 if [ -z "$1" ]; then
     log_error "Missing discovery URL."
-    echo "Usage: $0 <your_npoint_io_or_jsonbin_url>"
-    exit 1
 fi
-
 DISCOVERY_URL="$1"
-log_info "Using discovery URL: $DISCOVERY_URL"
 
 # --- Dependency Checks ---
-if ! command -v curl &> /dev/null; then
-    log_error "curl is not installed. Please install it to continue."
-fi
-
-if ! command -v ssh &> /dev/null; then
-    log_error "ssh is not installed. Please install it to continue."
-fi
+command -v curl >/dev/null 2>&1 || log_error "curl is not installed."
+command -v ssh >/dev/null 2>&1 || log_error "ssh is not installed."
 
 # --- 2. Ollama Service Check ---
-log_info "Checking if Ollama is running at http://localhost:11434..."
+log_info "Checking Ollama status..."
 
-# Use curl to check if the Ollama API is responsive
 if curl --silent --fail http://localhost:11434/ > /dev/null 2>&1; then
-    log_success "Ollama is already running."
+    log_success "Ollama is running."
 else
-    log_warn "Ollama not detected. Attempting to start it..."
-    
-    # Set OLLAMA_HOST for all platforms
+    log_warn "Ollama not detected. Starting..."
     export OLLAMA_HOST='0.0.0.0'
-    log_info "Set export OLLAMA_HOST=0.0.0.0"
     
-    # Start ollama serve in the background
-    # Redirect its stdout/stderr to /dev/null so it doesn't clutter our output
-    ollama serve > /dev/null 2>&1 &
+    log_info "Starting Ollama..."
+    echo -e "${DIM}--- Ollama Logs ---${NC}"
     
-    # Save the Process ID (PID) of the background command
+    ollama serve 2>&1 | while IFS= read -r line; do
+        echo -e "${DIM}[Ollama] $line${NC}"
+    done &
+    
     OLLAMA_PID=$!
-    
-    log_info "Started Ollama in the background (PID: $OLLAMA_PID)."
-    log_info "Waiting for Ollama to initialize..."
-    
-    # Give it 5 seconds to start up
     sleep 5
     
-    # Check again
     if ! curl --silent --fail http://localhost:11434/ > /dev/null 2>&1; then
-        log_error "Failed to start Ollama. Please start it manually and re-run the script."
+        log_error "Failed to start Ollama."
     fi
-    
-    log_success "Ollama started successfully."
+    log_success "Ollama active."
 fi
 
-echo "" # Spacing
+echo ""
 
 # --- 3. Start Tunnel ---
-log_info "Starting secure tunnel for Ollama (http://localhost:11434)..."
-log_warn "Waiting for public URL... (This may take a moment)"
+log_info "Opening secure tunnel..."
+log_warn "Waiting for public URL..."
 
-# 1. Start localhost.run tunnel.
-# 2. Redirect stderr (where the URL is printed) to stdout.
-# 3. Pipe the output line by line to the while loop.
-ssh -R 80:localhost:11434 nokey@localhost.run 2>&1 | while read -r line; do
-    # 4. Print every line from the ssh command
-    # echo "SSH: $line"
+ssh -T -R 80:localhost:11434 nokey@localhost.run 2>&1 | while IFS= read -r line; do
+    
+    clean_line=$(echo "$line" | tr -d '\r')
 
-    # 5. Look for the line containing the https URL
-    if [[ $line == *"https://"* ]]; then
-        
-        # 6. Extract the URL
-        # Use grep with -o (only-matching) and a regex to find the URL
-        TUNNEL_URL=$(echo "$line" | grep -oP 'https://[a-zA-Z0-9.-]*\.life')
+    # (Uncomment for additional logs) Print every line from the ssh command
+    # if [ -n "$clean_line" ]; then
+    #     echo "SSH: $clean_line"
+    # fi
+
+    if [[ $clean_line == *"https://"* ]]; then
+        # Extract URL
+        TUNNEL_URL=$(echo "$clean_line" | grep -oP 'https://[a-zA-Z0-9.-]*\.life')
 
         if [ -n "$TUNNEL_URL" ]; then
-            log_success "Public URL found: $TUNNEL_URL"
-            
-            # 6. Post the new URL to the discovery service
-            log_info "Broadcasting URL to discovery service..."
+            log_success "URL Found: $TUNNEL_URL"
+            log_info "Broadcasting..."
             
             curl_response=$(curl --silent -X POST -H "Content-Type: application/json" \
-                 -d "{\"url\":\"$TUNNEL_URL\"}" "$DISCOVERY_URL")
+                  -d "{\"url\":\"$TUNNEL_URL\"}" "$DISCOVERY_URL")
             
-            log_success "Broadcast complete."
-            echo "" # Add spacing
-            echo "" # Add spacing
-            log_warn "Leave this terminal open to keep the tunnel alive."
-            log_warn "Press Ctrl+C to shut down."
-            echo "" # Add spacing
+            log_success "Gateway live!"
+            echo ""
+            log_warn "Press Ctrl+C to stop."
+            echo ""
         fi
     fi
-    
-    # Optional: uncomment to see all ssh output (can be noisy)
-    # echo -e "${DIM}SSH: $line${NC}"
 done
