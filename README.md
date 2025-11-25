@@ -11,11 +11,11 @@ Ollama Server Gateway solves the fundamental challenges of GenAI learning and ex
 ### Key Features
 
 - 🔐 **Secure Tunneling** - Encrypted SSH tunnels for safe remote access
-- 🚀 **Instant Discovery** - Automatic service registration and discovery
+- 🚀 **Instant Discovery** - Automatic service registration and discovery via ntfy.sh
 - 🔒 **Data Privacy** - All processing happens locally on your machine
 - ⚡ **Zero Configuration** - Single command setup and deployment
 - 🎓 **Education-First** - Perfect for students and learners
-- 💰 **Cost-Free** - No cloud API costs or compute fees
+- 💰 **Cost-Free** - No cloud API costs, compute fees, or external service dependencies
 
 ## 📋 Prerequisites
 
@@ -28,20 +28,16 @@ Before running the gateway, ensure you have:
 
 ## 🚀 Quick Start
 
-### 1. Create a Discovery Endpoint
+### 1. Choose a Topic Name
 
-First, create a JSON endpoint for service discovery using one of these services:
+Pick a unique topic name for your gateway. This acts as your discovery channel:
 
-- [npoint.io](https://www.npoint.io/) - Simple JSON storage
-- [jsonbin.io](https://jsonbin.io/) - JSON storage with API
+- **Simple option**: Use your email or username (e.g., `john.doe@example.com` or `johndoe123`)
+- **Secure option**: Generate a random UUID for better security
+  - Generate a UUID here: [UUID Generator](https://www.uuidgenerator.net/)
+  - Example: `a3d5f7c2-9b4e-4a1c-8f2d-6e9b3c1a5d7f`
 
-Initialize your endpoint with:
-
-```json
-{
-  "url": ""
-}
-```
+⚠️ **Security Note**: Anyone who knows your topic name can discover your gateway URL. Use a UUID for sensitive use cases.
 
 ### 2. Download the Script
 
@@ -56,14 +52,14 @@ chmod +x ollama-gateway-connect.sh
 ### 3. Start the Gateway
 
 ```bash
-./ollama-gateway-connect.sh https://api.npoint.io/your-endpoint-id
+./ollama-gateway-connect.sh your-unique-topic-name
 ```
 
 The script will:
 
 - ✅ Check if Ollama is running (starts it if needed)
 - ✅ Create a secure SSH tunnel via localhost.run
-- ✅ Register the public URL to your discovery endpoint
+- ✅ Register the public URL to ntfy.sh using your topic
 - ✅ Keep the connection alive
 
 ### 4. Example Connection from Google Colab
@@ -71,13 +67,14 @@ The script will:
 In your Colab notebook:
 
 ```python
-import ollama
+from ollama import Client
 import requests
-import pandas as pd
 
-# PASTE YOUR URL HERE
 OLLAMA_HOST = ""
-DISCOVERY_URL = "https://api.npoint.io/bd3f03580492bf829ab5"
+
+# Replace with the same topic you used in the bash script
+TOPIC = "your-unique-topic-name"
+DISCOVERY_URL = f"https://ntfy.sh/{TOPIC}/json?poll=1&since=latest";
 
 def discover_ollama_gateway(url):
   response = requests.get(url, timeout=10)
@@ -86,14 +83,13 @@ def discover_ollama_gateway(url):
 
 try:
     data = discover_ollama_gateway(DISCOVERY_URL)
-    if data['url'] != "initializing":
-      OLLAMA_HOST = data['url']
-      print(f"Discovered local Ollama at: {OLLAMA_HOST}")
+    if data.get('message'):
+      OLLAMA_HOST = data.get('message')
+      print(f"Successfully discovered local Ollama at: {OLLAMA_HOST}")
 except Exception as e:
     print(f"Error connecting to discovery service: {e}")
 
-client = ollama.Client(host=OLLAMA_HOST)
-client.list()
+client = Client(host=OLLAMA_HOST)
 ```
 
 ## 🛠️ Usage
@@ -101,27 +97,31 @@ client.list()
 ### Basic Syntax
 
 ```bash
-./ollama-gateway-connect.sh <discovery_url>
+./ollama-gateway-connect.sh <unique-topic-name>
 ```
 
 ### Arguments
 
-| Argument        | Description                               | Required |
-| --------------- | ----------------------------------------- | -------- |
-| `discovery_url` | Your npoint.io or jsonbin.io endpoint URL | Yes      |
+| Argument     | Description                                          | Required |
+| ------------ | ---------------------------------------------------- | -------- |
+| `topic-name` | Your unique topic name or UUID for service discovery | Yes      |
 
-### Example
+### Examples
 
 ```bash
-./ollama-gateway-connect.sh https://api.npoint.io/abc123def456
+# Using email/username (simple but less secure)
+./ollama-gateway-connect.sh john.doe@example.com
+
+# Using UUID (recommended for security)
+./ollama-gateway-connect.sh a3d5f7c2-9b4e-4a1c-8f2d-6e9b3c1a5d7f
 ```
 
 ## 📊 How It Works
 
 1. **Service Detection** - Script checks if Ollama is running locally
 2. **Tunnel Creation** - Establishes secure SSH tunnel via localhost.run
-3. **URL Broadcasting** - Registers public URL to discovery endpoint
-4. **Client Discovery** - Colab notebooks fetch URL from discovery service
+3. **URL Broadcasting** - Publishes public URL to ntfy.sh topic
+4. **Client Discovery** - Colab notebooks fetch URL from ntfy.sh
 5. **Secure Connection** - Encrypted traffic flows through the tunnel
 
 ## 🔧 Advanced Configuration
@@ -147,51 +147,57 @@ This allows Ollama to accept connections from the tunnel.
 
 ## ⚠️ Troubleshooting
 
-### Ollama Won't Start
+### 1. Ollama Won't Start
+
+If Ollama fails to start automatically, manually start it with ports open:
 
 ```bash
-# Manually start Ollama
+# Stop any existing Ollama processes
+pkill ollama
+
+# Start Ollama with correct configuration
 export OLLAMA_HOST='0.0.0.0'
 ollama serve
 ```
 
 Then run the gateway script in a new terminal.
 
-### Tunnel Connection Failed
+### 2. Ollama Running But Colab Cannot Access
 
-- Check your internet connection
-- Verify SSH is installed: `ssh -V`
-- Try restarting the script
-
-### Discovery Service Not Updating
-
-- Verify your endpoint URL is correct
-- Check endpoint permissions (must allow POST requests)
-- Test with curl manually:
-  ```bash
-  curl -X POST -H "Content-Type: application/json" \
-       -d '{"url":"test"}' YOUR_ENDPOINT_URL
-  ```
-
-### Port Already in Use
-
-If port 11434 is busy:
+If Ollama is running but Colab can't connect, the ports may not be configured correctly:
 
 ```bash
-# Find process using the port
-lsof -i :11434
+# Stop the current Ollama instance
+pkill ollama
 
-# Kill the process if needed
-kill -9 <PID>
+# Let the gateway script start Ollama with the correct configuration
+./ollama-gateway-connect.sh your-topic-name
 ```
+
+The script will automatically start Ollama with the proper port settings.
+
+### 3. Tunnel Disconnected
+
+If the tunnel connection drops:
+
+1. Stop the gateway script with `Ctrl+C`
+2. Restart the gateway script:
+   ```bash
+   ./ollama-gateway-connect.sh your-topic-name
+   ```
+3. Re-run the connection block in your Colab notebook to fetch the new URL
 
 ## 🔒 Security Considerations
 
 - **Tunnel Encryption** - All traffic is encrypted via SSH
 - **Local Processing** - Data never leaves your machine
 - **Temporary URLs** - localhost.run URLs expire after tunnel closes
+- **Topic Privacy** - Anyone with your topic name can discover your gateway URL
+  - Use a UUID instead of predictable names for sensitive work
+  - Consider your topic name as a shared secret
+  - Generate secure UUIDs at: [UUID Generator](https://www.uuidgenerator.net/)
 - **No Authentication** - Anyone with the URL can access your Ollama instance
-  - Only share URLs with trusted parties
+  - Only share topic names with trusted parties
   - Consider implementing additional authentication in production
   - Keep the terminal window visible to monitor access
 
@@ -212,7 +218,7 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 
 - [Ollama](https://ollama.com/) - Local LLM runtime
 - [localhost.run](https://localhost.run/) - SSH tunnel service
-- [npoint.io](https://npoint.io/) - JSON storage service
+- [ntfy.sh](https://ntfy.sh/) - Simple notification and messaging service
 
 ## 📞 Support
 

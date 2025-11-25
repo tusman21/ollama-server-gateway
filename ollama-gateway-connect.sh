@@ -37,9 +37,9 @@ echo ""
 
 # --- 1. Argument Check ---
 if [ -z "$1" ]; then
-    log_error "Missing discovery URL."
+    log_error "Missing Topic. Usage: $0 <unique-topic-name>"
 fi
-DISCOVERY_URL="$1"
+TOPIC="$1"
 
 # --- Dependency Checks ---
 command -v curl >/dev/null 2>&1 || log_error "curl is not installed."
@@ -67,7 +67,7 @@ else
     if ! curl --silent --fail http://localhost:11434/ > /dev/null 2>&1; then
         log_error "Failed to start Ollama."
     fi
-    log_success "Ollama active."
+    log_success "Ollama is running."
 fi
 
 echo ""
@@ -90,16 +90,16 @@ ssh -T -R 80:localhost:11434 nokey@localhost.run 2>&1 | while IFS= read -r line;
         TUNNEL_URL=$(echo "$clean_line" | grep -oP 'https://[a-zA-Z0-9.-]*\.life')
 
         if [ -n "$TUNNEL_URL" ]; then
-            log_success "URL Found: $TUNNEL_URL"
-            log_info "Broadcasting..."
+            log_info "Attempting to register tunnel URL: $TUNNEL_URL"
             
-            curl_response=$(curl --silent -X POST -H "Content-Type: application/json" \
-                  -d "{\"url\":\"$TUNNEL_URL\"}" "$DISCOVERY_URL")
-            
-            log_success "Gateway live!"
-            echo ""
-            log_warn "Press Ctrl+C to stop."
-            echo ""
+            if curl --silent --show-error --fail -d "$TUNNEL_URL" "https://ntfy.sh/$TOPIC"; then
+                log_success "Gateway live!"
+                echo ""
+                log_warn "Press Ctrl+C to stop."
+                echo ""
+            else
+                log_error "Failed to register tunnel URL with ntfy.sh"
+            fi
         fi
     fi
 done
