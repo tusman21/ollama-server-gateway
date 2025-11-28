@@ -42,7 +42,7 @@ Pick a unique topic name for your gateway. This acts as your discovery channel:
 ### 2. Download the Script
 
 ```bash
-curl -L -o ollama-gateway-connect.sh https://github.com/tusman21/ollama-server-gateway/blob/main/ollama-gateway-connect.sh
+curl -L -o ollama-gateway-connect.sh https://raw.githubusercontent.com/tusman21/ollama-server-gateway/refs/heads/main/ollama-gateway-connect.sh
 ```
 
 ### 3. Make it executable
