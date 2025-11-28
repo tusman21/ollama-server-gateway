@@ -43,13 +43,16 @@ Pick a unique topic name for your gateway. This acts as your discovery channel:
 
 ```bash
 # Download the gateway script
-wget https://github.com/tusman21/ollama-server-gateway/blob/main/ollama-gateway-connect.sh
+curl -L -o ollama-gateway-connect.sh https://github.com/tusman21/ollama-server-gateway/blob/main/ollama-gateway-connect.sh
+```
 
-# Make it executable
+### 3. Make it executable
+
+```bash
 chmod +x ollama-gateway-connect.sh
 ```
 
-### 3. Start the Gateway
+### 4. Start the Gateway
 
 ```bash
 ./ollama-gateway-connect.sh your-unique-topic-name
@@ -62,7 +65,7 @@ The script will:
 - ✅ Register the public URL to ntfy.sh using your topic
 - ✅ Keep the connection alive
 
-### 4. Example Connection from Google Colab
+### 5. Example Connection from Google Colab
 
 In your Colab notebook:
 
